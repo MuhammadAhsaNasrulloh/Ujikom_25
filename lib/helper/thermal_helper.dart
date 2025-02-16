@@ -3,6 +3,51 @@ import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:typed_data';
 
+class CurrencyFormatUtils {
+  static final NumberFormat _currencyFormatter = NumberFormat.currency(
+    locale: 'id_ID',
+    symbol: 'Rp',
+    decimalDigits: 0,
+  );
+
+  // Format number to currency string (returns "Rp10.000")
+  static String format(dynamic number) {
+    if (number == null) return 'Rp0';
+
+    // Handle string input
+    if (number is String) {
+      number = double.tryParse(number) ?? 0;
+    }
+
+    // Handle int input
+    if (number is int) {
+      number = number.toDouble();
+    }
+
+    return _currencyFormatter.format(number);
+  }
+
+  // Format without symbol (returns "10.000")
+  static String formatWithoutSymbol(dynamic number) {
+    if (number == null) return '0';
+
+    return format(number).replaceAll('Rp', '');
+  }
+
+  // Parse currency string to number (handles "Rp10.000" or "10.000")
+  static double parse(String currencyString) {
+    if (currencyString.isEmpty) return 0;
+
+    // Remove currency symbol and any whitespace
+    String cleanString = currencyString
+        .replaceAll('Rp', '')
+        .replaceAll(' ', '')
+        .replaceAll('.', '');
+
+    return double.tryParse(cleanString) ?? 0;
+  }
+}
+
 class ThermalPrinterHelper {
   final BlueThermalPrinter bluetooth = BlueThermalPrinter.instance;
 
@@ -65,8 +110,8 @@ class ThermalPrinterHelper {
       }
 
       // Then check if printer is available
-      final isAvailable = await bluetooth
-          .isAvailable ?? false; // Remove the ?? false since isAvailable() returns bool
+      final isAvailable = await bluetooth.isAvailable ??
+          false; // Remove the ?? false since isAvailable() returns bool
       if (!isAvailable) {
         return false;
       }
@@ -142,6 +187,7 @@ class ThermalPrinterHelper {
       }
 
       // Header
+      await bluetooth.printNewLine();
       await bluetooth.printCustom("Waixi Laundry", 2, 1);
       await bluetooth.printNewLine();
 
@@ -165,7 +211,8 @@ class ThermalPrinterHelper {
         for (var service in services) {
           await bluetooth.printCustom(
               "${service['services']['layanan']}", 1, 0);
-          await bluetooth.printCustom("Rp${service['harga_layanan']}", 1, 2);
+          await bluetooth.printCustom(
+              "${CurrencyFormatUtils.format(service['harga_layanan'])}", 1, 2);
         }
         await bluetooth.printCustom("--------------------------------", 1, 1);
       }
@@ -179,17 +226,21 @@ class ThermalPrinterHelper {
               "${product['products']['produk']} x${product['qty']} ${product['units']['unit']}",
               1,
               0);
-          await bluetooth.printCustom("Rp${NumberFormat.currency(locale: 'id_ID',symbol: 'Rp', decimalDigits: 0).format(product['harga_produk'])}", 1, 2);
+          await bluetooth.printCustom(
+              "${CurrencyFormatUtils.format(product['harga'])}", 1, 2);
         }
         await bluetooth.printCustom("--------------------------------", 1, 1);
       }
 
       // Payment details
       await bluetooth.printCustom(
-          "TOTAL: Rp${transaction['total_harga']}", 1, 2);
-      await bluetooth.printCustom("BAYAR: Rp${transaction['bayar']}", 1, 2);
+          "TOTAL: ${CurrencyFormatUtils.format(transaction['total_harga'])}", 1, 2);
       await bluetooth.printCustom(
-          "KEMBALI: Rp${transaction['kembalian']}", 1, 2);
+          "BAYAR: ${CurrencyFormatUtils.format(transaction['bayar'])}", 1, 2);
+      await bluetooth.printCustom(
+          "KEMBALI: ${CurrencyFormatUtils.format(transaction['kembalian'])}",
+          1,
+          2);
 
       // Footer
       await bluetooth.printNewLine();

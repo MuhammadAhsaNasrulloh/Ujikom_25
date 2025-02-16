@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 
 class EditProduct extends StatefulWidget {
   final dynamic productId;
@@ -25,11 +28,13 @@ class _EditProductState extends State<EditProduct> {
   Map<String, dynamic>? productDetail;
   List<dynamic> categories = [];
   List<dynamic> units = [];
+  final ImagePicker _picker = ImagePicker();
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
   String? selectedCategoryId;
   String? selectedUnitId;
+  File? _imageFile;
 
   @override
   void initState() {
@@ -94,6 +99,47 @@ class _EditProductState extends State<EditProduct> {
     }
   }
 
+   Future<String?> _uploadImage() async {
+    if (_imageFile == null) return null;
+
+    try {
+      final fileExt = _imageFile!.path.split('.').last;
+      final fileName = '${DateTime.now().toIso8601String()}.$fileExt';
+      final filePath = fileName;
+
+      // Upload the file
+      await _supabase.storage
+          .from('product_images')
+          .upload(filePath, _imageFile!);
+
+      // Get the public URL
+      final imageUrl = _supabase.storage
+          .from('product_images')
+          .getPublicUrl(filePath);
+
+      return imageUrl;
+    } catch (e) {
+      _showErrorMessage('Error uploading image: $e');
+      return null;
+    }
+  }
+
+
+  Future<void> _pickImage() async {
+    try {
+      final XFile? pickedFile =
+          await _picker.pickImage(source: ImageSource.gallery);
+
+      if (pickedFile != null) {
+        setState(() {
+          _imageFile = File(pickedFile.path);
+        });
+      }
+    } catch (e) {
+      _showErrorMessage('Error picking image: $e');
+    }
+  }
+
   Future<void> _fetchUnits() async {
     try {
       final response =
@@ -113,13 +159,38 @@ class _EditProductState extends State<EditProduct> {
     try {
       setState(() => isLoading = true);
 
-      await _supabase.from('products').update({
+      // Upload image if new image is selected
+      String? newImageUrl;
+      if (_imageFile != null) {
+        newImageUrl = await _uploadImage();
+        if (newImageUrl == null) {
+          _showErrorMessage('Failed to upload image');
+          return;
+        }
+      }
+
+      // Prepare update data
+      final updateData = {
         'produk': _nameController.text,
         'harga': double.parse(_priceController.text),
         'kategori_id': int.parse(selectedCategoryId!),
         'unit_id': int.parse(selectedUnitId!),
         'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', widget.productId);
+      };
+
+      // Add image URL to update data if new image was uploaded
+      if (newImageUrl != null) {
+        updateData['foto_produk'] = newImageUrl;
+      }
+
+      // Update product
+      await _supabase
+          .from('products')
+          .update(updateData)
+          .eq('id', widget.productId);
+
+      // Log the activity
+      await _logActivity('Updated product: ${_nameController.text}');
 
       if (mounted) {
         Navigator.pop(context, true);
@@ -151,6 +222,12 @@ class _EditProductState extends State<EditProduct> {
           'Edit Product',
           style: TextStyle(color: Colors.white),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete, color: Colors.red),
+            onPressed: _deleteProduct,
+          )
+        ],
         backgroundColor: AppColors.primaryColor,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -251,40 +328,110 @@ class _EditProductState extends State<EditProduct> {
     );
   }
 
+  Future<void> _deleteProduct() async {
+    try {
+      setState(() => isLoading = true);
+
+      // Delete the old image from storage if it exists
+      if (productDetail?['foto_produk'] != null) {
+        try {
+          final oldImagePath = productDetail!['foto_produk'].split('/').last;
+          await _supabase.storage
+              .from('product_images')
+              .remove([oldImagePath]);
+        } catch (e) {
+          // Continue with deletion even if image removal fails
+          print('Error removing old image: $e');
+        }
+      }
+
+      // Delete related transaction details
+      await _supabase
+          .from('detail_transaction')
+          .delete()
+          .eq('produk_id', widget.productId);
+
+      // Delete the product
+      await _supabase
+          .from('products')
+          .delete()
+          .eq('id', widget.productId);
+
+      // Log the activity
+      await _logActivity('Deleted product: ${_nameController.text}');
+
+      if (mounted) {
+        Navigator.pop(context, true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Product deleted successfully')),
+        );
+      }
+    } catch (e) {
+      _showErrorMessage('Error deleting product: $e');
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
+
+    Future<void> _logActivity(String message) async {
+    try {
+      await _supabase.from('activity_logs').insert({
+        'activity_type': message,
+        'timestamp': DateTime.now().toIso8601String(),
+        'user_id': _supabase.auth.currentUser?.id, // Add user ID if available
+        'details': {
+          'product_id': widget.productId,
+          'product_name': _nameController.text,
+          'action_type': message.split(':')[0].trim(),
+        },
+      });
+    } catch (e) {
+      print('Error logging activity: $e');
+    }
+  }
+
   Widget _buildProductImage() {
-    return Container(
-      width: double.infinity,
-      height: 200,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: productDetail?['foto_produk'] != null
-            ? Image.network(
-                productDetail!['foto_produk'],
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Icon(
-                    Icons.image_not_supported,
-                    color: Colors.grey,
-                    size: 40,
-                  );
-                },
-              )
-            : const Icon(
-                Icons.image,
-                color: Colors.grey,
-                size: 40,
-              ),
+    return GestureDetector(
+      onTap: _pickImage,
+      child: Container(
+        width: double.infinity,
+        height: 200,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: _imageFile != null
+              ? Image.file(
+                  _imageFile!,
+                  fit: BoxFit.cover,
+                )
+              : productDetail?['foto_produk'] != null
+                  ? Image.network(
+                      productDetail!['foto_produk'],
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.image_not_supported,
+                          color: Colors.grey,
+                          size: 40,
+                        );
+                      },
+                    )
+                  : const Icon(
+                      Icons.image,
+                      color: Colors.grey,
+                      size: 40,
+                    ),
+        ),
       ),
     );
   }
@@ -358,4 +505,8 @@ class _EditProductState extends State<EditProduct> {
       ),
     );
   }
+}
+
+extension on String {
+  get data => null;
 }

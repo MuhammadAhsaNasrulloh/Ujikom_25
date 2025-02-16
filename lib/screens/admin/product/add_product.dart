@@ -12,6 +12,15 @@ class AddProduct extends StatefulWidget {
   State<AddProduct> createState() => _AddProductState();
 }
 
+class AppColors {
+  static const Color primaryColor = Color(0xFF2563EB);
+  static const Color backgroundColor = Color(0xFFF8FAFC);
+  static const Color textDarkColor = Color(0xFF1E293B);
+  static const Color textLightColor = Color(0xFF64748B);
+  static const Color cardColor = Color(0xFFFFFFFF);
+  static const Color shadowColor = Color(0x1A000000);
+}
+
 class _AddProductState extends State<AddProduct> {
   final supabase = Supabase.instance.client;
   final _formKey = GlobalKey<FormState>();
@@ -162,100 +171,75 @@ class _AddProductState extends State<AddProduct> {
 
   @override
   Widget build(BuildContext context) {
-    if (!mounted) return const SizedBox.shrink();
-
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         title: const Text(
-          'Tambah Produk',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: const Color(0xFF005BAC),
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            color: Colors.grey[300],
-            height: 1,
+          'Add Product',
+          style: TextStyle(
+            color: Colors.white, 
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
           ),
         ),
+        backgroundColor: AppColors.primaryColor,
+        iconTheme: IconThemeData(color: Colors.white),
+        elevation: 0,
       ),
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: Center(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'Detail Produk',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF005BAC),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        _buildTextField(
-                            'Nama Produk', _produkController, false),
-                        _buildDropdownFieldCategory(),
-                        _buildDropdownFieldUnit(),
-                        _buildImageUploader(),
-                        _buildTextField('Harga', _hargaController, true),
-                        const SizedBox(height: 20),
-                        ElevatedButton(
-                          onPressed: isLoading ? null : _addProduct,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF005BAC),
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 16, horizontal: 20),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                          ),
-                          child: isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                      color: Colors.white, strokeWidth: 2),
-                                )
-                              : const Text(
-                                  'Tambah Produk',
-                                  style: TextStyle(
-                                      color: Colors.white, fontSize: 16),
-                                ),
-                        ),
-                      ],
-                    ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildTextField('Product Name', _produkController, false),
+              const SizedBox(height: 16),
+              _buildDropdownFieldCategory(),
+              const SizedBox(height: 16),
+              _buildDropdownFieldUnit(),
+              const SizedBox(height: 16),
+              _buildImageUploader(),
+              const SizedBox(height: 16),
+              _buildTextField('Price', _hargaController, true),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: isLoading ? null : _addProduct,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryColor,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
+                child: isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Text(
+                        'Add Product',
+                        style: TextStyle(
+                          color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700,),
+                      ),
               ),
-            ),
+            ],
           ),
         ),
       ),
-      bottomNavigationBar: _buildBottomAppBar(context),
     );
   }
 
-   Widget _buildDropdownFieldCategory() {
+  Widget _buildDropdownFieldCategory() {
     return DropdownButtonFormField<String>(
       value: _selectedCategoryId,
       decoration: InputDecoration(
-        labelText: 'Kategori',
+        labelText: 'Category',
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        filled: true,
+        fillColor: Colors.white,
       ),
       items: _category.map((category) {
         return DropdownMenuItem<String>(
@@ -270,44 +254,37 @@ class _AddProductState extends State<AddProduct> {
   }
 
   Widget _buildDropdownFieldUnit() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0, top: 16.0),
-      child: DropdownButtonFormField<String>(
-        value: _selectedUnitId,
-        decoration: InputDecoration(
-          labelText: 'Unit',
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          filled: true,
-          fillColor: Colors.white,
-        ),
-        items: _units.map((unit) {
-          return DropdownMenuItem<String>(
-            value: unit['id'].toString(),
-            child: Text(
-                unit['unit'] ?? 'Unknown'), // Berikan nilai default jika null
-          );
-        }).toList(),
-        onChanged: (val) {
-          if (mounted) {
-            setState(() => _selectedUnitId = val);
-          }
-        },
+    return DropdownButtonFormField<String>(
+      value: _selectedUnitId,
+      decoration: InputDecoration(
+        labelText: 'Unit',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        filled: true,
+        fillColor: Colors.white,
       ),
+      items: _units.map((unit) {
+        return DropdownMenuItem<String>(
+          value: unit['id'].toString(),
+          child: Text(unit['unit'] ?? 'Unknown'),
+        );
+      }).toList(),
+      onChanged: (val) {
+        setState(() => _selectedUnitId = val);
+      },
     );
   }
 
   Widget _buildImageUploader() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Foto Produk',
-              style: TextStyle(fontSize: 14, color: Colors.black87)),
-          const SizedBox(height: 8),
-          Container(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Product Image',
+            style: TextStyle(fontSize: 14, color: Colors.black87)),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: _pickImage,
+          child: Container(
             height: 150,
-            width: double.infinity,
             decoration: BoxDecoration(
               color: Colors.grey[200],
               borderRadius: BorderRadius.circular(8),
@@ -318,95 +295,50 @@ class _AddProductState extends State<AddProduct> {
                     borderRadius: BorderRadius.circular(8),
                     child: Image.file(_selectedImage!, fit: BoxFit.cover),
                   )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        onPressed: _pickImage,
-                        icon: const Icon(Icons.add_a_photo,
-                            size: 40, color: Colors.grey),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Pilih Gambar',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ],
+                : Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.add_a_photo, size: 40, color: Colors.grey),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Upload Image',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
                   ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _buildTextField(
       String label, TextEditingController controller, bool isNumeric,
       {int maxLines = 1}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: TextFormField(
-        controller: controller,
-        maxLines: maxLines,
-        keyboardType: isNumeric ? TextInputType.number : TextInputType.text,
-        decoration: InputDecoration(
-          labelText: label,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          filled: true,
-          fillColor: Colors.white,
-        ),
-        validator: (value) {
-          if (value == null || value.isEmpty) {
-            return '$label tidak boleh kosong';
-          }
-          if (isNumeric) {
-            final number = num.tryParse(value);
-            if (number == null) {
-              return '$label harus berupa angka';
-            }
-          }
-          return null;
-        },
+    return TextFormField(
+      controller: controller,
+      maxLines: maxLines,
+      keyboardType: isNumeric ? TextInputType.number : TextInputType.text,
+      decoration: InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        filled: true,
+        fillColor: Colors.white,
       ),
-    );
-  }
-
-  int _selectedIndex = 1;
-  Widget _buildBottomAppBar(BuildContext context) {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      currentIndex: _selectedIndex,
-      onTap: (index) {
-        setState(() {
-          _selectedIndex = index;
-        });
-
-        if (index == 0) {
-          Navigator.pushNamed(context, AppRoutes.activityLog);
-        } else if (index == 1) {
-          Navigator.pushNamed(context, AppRoutes.adminDashboard);
-        } else if (index == 2) {
-          Navigator.pushNamed(context, AppRoutes.profilePage);
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return '$label cannot be empty';
         }
+        if (isNumeric) {
+          final number = num.tryParse(value);
+          if (number == null) {
+            return '$label must be a number';
+          }
+        }
+        return null;
       },
-      selectedItemColor: const Color(0xFF005BAC),
-      unselectedItemColor: Colors.grey,
-      selectedIconTheme:
-          const IconThemeData(color: Color(0xFF005BAC), size: 28),
-      unselectedIconTheme: const IconThemeData(color: Colors.grey, size: 24),
-      items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.history),
-          label: 'History',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home),
-          label: 'Home',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.person),
-          label: 'Profile',
-        ),
-      ],
     );
   }
 }

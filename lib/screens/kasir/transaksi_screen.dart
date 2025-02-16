@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -16,7 +17,7 @@ class CartItem {
   final int? unitId; // Change this to int
   final String unitName;
   int quantity;
-  SelectedService? selectedService; 
+  SelectedService? selectedService;
 
   CartItem({
     required this.productId,
@@ -28,8 +29,10 @@ class CartItem {
     this.selectedService,
   });
 
-  double get total => productPrice * quantity + (selectedService?.servicePrice ?? 0);
+  double get total =>
+      productPrice * quantity + (selectedService?.servicePrice ?? 0);
 }
+
 class SelectedService {
   final int serviceId;
   final String serviceName;
@@ -41,11 +44,18 @@ class SelectedService {
     required this.servicePrice,
   });
 }
+
 class TransaksiScreen extends StatefulWidget {
   const TransaksiScreen({super.key});
 
   @override
   State<TransaksiScreen> createState() => _TransaksiScreenState();
+}
+
+class DateTimeUtils {
+  static DateTime nowWIB() {
+    return DateTime.now().toUtc().add(const Duration(hours: 7));
+  }
 }
 
 class _TransaksiScreenState extends State<TransaksiScreen> {
@@ -71,8 +81,18 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
   final ThermalPrinterHelper _printerHelper = ThermalPrinterHelper();
   BluetoothDevice? _selectedPrinter;
   bool _isPrinterConnected = false;
-
+  final currencyFormatter = NumberFormat.currency(
+    locale: 'id',
+    symbol: 'Rp ',
+    decimalDigits: 0,
+  );
   Timer? _debounce;
+
+  double _parseFormattedCurrency(String value) {
+    // Remove currency symbol, dots, and other non-digit characters except decimal point
+    final cleanValue = value.replaceAll(RegExp(r'[Rp\s.]'), '');
+    return double.tryParse(cleanValue) ?? 0;
+  }
 
   @override
   void initState() {
@@ -114,9 +134,10 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
       print('Printer initialization error: $e');
     }
   }
-   Future<void> _connectPrinter() async {
+
+  Future<void> _connectPrinter() async {
     if (_selectedPrinter == null) return;
-    
+
     try {
       await _printerHelper.connectToDevice(_selectedPrinter!);
       setState(() => _isPrinterConnected = true);
@@ -137,31 +158,24 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
       return false;
     }
 
-    if (_selectedServices.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pilih minimal satu layanan')),
-      );
-      return false;
-    }
-
-    if (_totalHargaController.text.isEmpty || 
-        double.tryParse(_totalHargaController.text) == 0) {
+    if (_totalHargaController.text.isEmpty ||
+        _parseFormattedCurrency(_totalHargaController.text) == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Total harga tidak valid')),
       );
       return false;
     }
 
-    if (_bayarController.text.isEmpty || 
-        double.tryParse(_bayarController.text) == 0) {
+    if (_bayarController.text.isEmpty ||
+        _parseFormattedCurrency(_bayarController.text) == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Jumlah pembayaran tidak valid')),
       );
       return false;
     }
 
-    final bayar = double.tryParse(_bayarController.text) ?? 0;
-    final total = double.tryParse(_totalHargaController.text) ?? 0;
+    final bayar = _parseFormattedCurrency(_bayarController.text);
+    final total = _parseFormattedCurrency(_totalHargaController.text);
     if (bayar < total) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Pembayaran kurang dari total harga')),
@@ -169,10 +183,10 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
       return false;
     }
 
-    if (_selectedPelangganId == null && 
-        (_namaPelangganController.text.isEmpty || 
-         _alamatController.text.isEmpty || 
-         _noHpController.text.isEmpty)) {
+    if (_selectedPelangganId == null &&
+        (_namaPelangganController.text.isEmpty ||
+            _alamatController.text.isEmpty ||
+            _noHpController.text.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Data pelanggan tidak lengkap')),
       );
@@ -181,6 +195,7 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
 
     return true;
   }
+
   Future<void> _fetchKasirId() async {
     final user = _supabase.auth.currentUser;
     if (user != null) {
@@ -230,10 +245,10 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
 
     return 'WXL-$formattedDate-$nextTransactionId';
   }
-  
+
   Future<void> _searchCustomers(String query) async {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    
+
     _debounce = Timer(const Duration(milliseconds: 500), () async {
       if (query.isEmpty) {
         setState(() {
@@ -244,7 +259,7 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
       }
 
       setState(() => _isSearching = true);
-      
+
       try {
         final response = await _supabase
             .from('pelanggans')
@@ -262,6 +277,7 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
       }
     });
   }
+
   Future<List<Map<String, dynamic>>> _fetchProducts() async {
     try {
       final response = await _supabase
@@ -455,24 +471,26 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
   }
 
   void _updateTotalPrices() {
-  double total = _cartItems.fold(0, (sum, item) {
-    // Hitung total per item (harga produk * quantity + harga service jika ada)
-    return sum + (item.productPrice * item.quantity) + (item.selectedService?.servicePrice ?? 0);
-  });
-  
-  _totalHargaController.text = total.toString();
+    double total = _cartItems.fold(0, (sum, item) {
+      return sum +
+          (item.productPrice * item.quantity) +
+          (item.selectedService?.servicePrice ?? 0);
+    });
+
+    _totalHargaController.text = currencyFormatter.format(total);
   }
 
   void _calculateKembalian() {
     if (_bayarController.text.isNotEmpty &&
         _totalHargaController.text.isNotEmpty) {
       try {
-        final bayar = double.parse(_bayarController.text);
-        final total = double.parse(_totalHargaController.text);
+        final bayar = _parseFormattedCurrency(_bayarController.text);
+        final total = _parseFormattedCurrency(_totalHargaController.text);
         final kembalian = bayar - total;
-        _kembalianController.text = kembalian.toStringAsFixed(2);
+        _kembalianController.text = currencyFormatter.format(kembalian);
       } catch (e) {
-        _kembalianController.text = '0';
+        print('Error calculating kembalian: $e');
+        _kembalianController.text = currencyFormatter.format(0);
       }
     }
   }
@@ -490,6 +508,7 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
       _updateTotalPrices();
     });
   }
+
   void _addToCart(Map<String, dynamic> product) {
     setState(() {
       final unitId = product['unit_id']?['id'] ?? 0; // Default to 0 if null
@@ -501,12 +520,15 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
       if (existingItemIndex != -1) {
         _cartItems[existingItemIndex].quantity++;
       } else {
+        final formattedPrice = currencyFormatter.format(product['harga']);
         _cartItems.add(CartItem(
-            productId: product['id'],
-            productName: product['produk'],
-            productPrice: product['harga'],
-            unitId: unitId, // Check the unit ID access
-            unitName: unitName));
+          productId: product['id'],
+          productName: product['produk'],
+          productPrice: product['harga'],
+          unitId: unitId, // Check the unit ID access
+          unitName: unitName,
+        ));
+        print("Added to cart: ${product['produk']} - $formattedPrice");
       }
       print("Cart Items: ${_cartItems.map((e) => e.productName).toList()}");
       _updateTotalPrices();
@@ -534,186 +556,256 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
 
   // Tambahkan fungsi untuk menampilkan dialog konfirmasi
   Future<void> _showConfirmationDialog() async {
-  // Format currency untuk tampilan yang lebih baik
-  final formatCurrency = (double value) => 
-      'Rp${value.toStringAsFixed(2).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}';
+    // Format currency untuk tampilan yang lebih baik
+    final formatCurrency = (double value) =>
+        'Rp${value.toStringAsFixed(2).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}';
 
-  return showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text('Konfirmasi Transaksi',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Mohon periksa kembali detail transaksi:',
-                  style: TextStyle(fontWeight: FontWeight.w500)),
-              const SizedBox(height: 16),
-              
-              // Informasi Pelanggan
-              Text('Pelanggan: ${_namaPelangganController.text}'),
-              Text('No. HP: ${_noHpController.text}'),
-              Text('Alamat: ${_alamatController.text}'),
-              const Divider(),
-              
-              // Detail Items
-              const Text('Items:', style: TextStyle(fontWeight: FontWeight.w500)),
-              ...(_cartItems.map((item) => Padding(
-                padding: const EdgeInsets.only(left: 8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${item.productName} (${item.quantity} ${item.unitName})'),
-                    if (item.selectedService != null)
-                      Text('+ ${item.selectedService!.serviceName}',
-                          style: const TextStyle(fontStyle: FontStyle.italic)),
-                  ],
-                ),
-              ))),
-              const Divider(),
-              
-              // Informasi Pembayaran
-              Text('Total: ${formatCurrency(double.parse(_totalHargaController.text))}'),
-              Text('Bayar: ${formatCurrency(double.parse(_bayarController.text))}'),
-              Text('Kembalian: ${formatCurrency(double.parse(_kembalianController.text))}'),
-              const Divider(),
-              
-              Text('Status: $_status'),
-            ],
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.grey,
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Konfirmasi Transaksi',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Mohon periksa kembali detail transaksi:',
+                    style: TextStyle(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 16),
+
+                // Informasi Pelanggan
+                Text('Pelanggan: ${_namaPelangganController.text}'),
+                Text('No. HP: ${_noHpController.text}'),
+                Text('Alamat: ${_alamatController.text}'),
+                const Divider(),
+
+                // Detail Items
+                const Text('Items:',
+                    style: TextStyle(fontWeight: FontWeight.w500)),
+                ...(_cartItems.map((item) => Padding(
+                      padding: const EdgeInsets.only(left: 8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                              '${item.productName} (${item.quantity} ${item.unitName})'),
+                          if (item.selectedService != null)
+                            Text('+ ${item.selectedService!.serviceName}',
+                                style: const TextStyle(
+                                    fontStyle: FontStyle.italic)),
+                        ],
+                      ),
+                    ))),
+                const Divider(),
+
+                // Informasi Pembayaran
+                Text(
+                    'Total: ${formatCurrency(double.parse(_totalHargaController.text))}'),
+                Text(
+                    'Bayar: ${formatCurrency(double.parse(_bayarController.text))}'),
+                Text(
+                    'Kembalian: ${formatCurrency(double.parse(_kembalianController.text))}'),
+                const Divider(),
+
+                Text('Status: $_status'),
+              ],
             ),
-            child: const Text('Periksa Kembali'),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
           ),
-          TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFF005BAC),
+          actions: <Widget>[
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.grey,
+              ),
+              child: const Text('Periksa Kembali'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
             ),
-            child: const Text('Konfirmasi & Simpan'),
-            onPressed: () {
-              Navigator.of(context).pop();
-              _processTransaction();
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF005BAC),
+              ),
+              child: const Text('Konfirmasi & Simpan'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _processTransaction();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
 
 // Pindahkan logika penyimpanan transaksi ke fungsi terpisah
-Future<void> _processTransaction() async {
-  try {
-    int pelangganId;
-    if (_selectedPelangganId == null) {
-      final pelangganResponse = await _supabase.from('pelanggans').insert({
-        'nama_pelanggan': _namaPelangganController.text,
-        'alamat': _alamatController.text,
-        'no_hp': _noHpController.text,
-      }).select().single();
-      pelangganId = pelangganResponse['id'];
-    } else {
-      pelangganId = _selectedPelangganId!;
+  Future<void> logActivity(String activityType, String description) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        await _supabase.from('activity_logs').insert({
+          'user_id': user.id,
+          'activity_type': activityType,
+          'description': description,
+          'created_at': DateTimeUtils.nowWIB(),
+        });
+      }
+    } catch (e) {
+      print('Error logging activity: $e');
     }
-
-    final kodeUnik = await _generateKodeUnik();
-    
-    final transactionResponse = await _supabase
-        .from('transactions')
-        .insert({
-          'kode_unik': kodeUnik,
-          'kasir_id': _kasirId,
-          'pelanggan_id': pelangganId,
-          'total_harga': double.parse(_totalHargaController.text),
-          'bayar': double.parse(_bayarController.text),
-          'kembalian': double.parse(_kembalianController.text),
-          'is_deleted': false,
-        })
-        .select()
-        .single();
-
-    final int transactionId = transactionResponse['id'];
-
-    // Insert transaction details
-    for (var item in _cartItems) {
-      await _supabase.from('detail_transaction').insert({
-        'transaksi_id': transactionId,
-        'status': _status,
-        'produk_id': item.productId,
-        'harga_produk': item.productPrice * item.quantity,
-        'layanan_id': item.selectedService?.serviceId,
-        'harga_layanan': item.selectedService?.servicePrice ?? 0,
-        'qty': item.quantity,
-        'unit_id': item.unitId,
-      });
-    }
-
-    // Print receipt
-    if (_isPrinterConnected) {
-      await _printThermalReceipt(transactionResponse, _cartItems);
-    } else {
-      await _printTransactionInvoice(transactionId);
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Transaksi berhasil disimpan!')),
-    );
-
-    _resetForm();
-  } catch (e) {
-    print('Error detail: $e');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error: $e')),
-    );
   }
-}
+
+  // Modify the _processTransaction function to include logging
+  Future<void> _processTransaction() async {
+    try {
+      int pelangganId;
+      if (_selectedPelangganId == null) {
+        final pelangganResponse = await _supabase
+            .from('pelanggans')
+            .insert({
+              'nama_pelanggan': _namaPelangganController.text,
+              'alamat': _alamatController.text,
+              'no_hp': _noHpController.text,
+            })
+            .select()
+            .single();
+        pelangganId = pelangganResponse['id'];
+
+        // Log new customer creation
+        await logActivity('NEW_CUSTOMER',
+            'Created new customer: ${_namaPelangganController.text}');
+      } else {
+        pelangganId = _selectedPelangganId!;
+      }
+
+      final kodeUnik = await _generateKodeUnik();
+
+      final transactionResponse = await _supabase
+          .from('transactions')
+          .insert({
+            'kode_unik': kodeUnik,
+            'kasir_id': _kasirId,
+            'pelanggan_id': pelangganId,
+            'total_harga': _parseFormattedCurrency(_totalHargaController.text),
+            'bayar': _parseFormattedCurrency(_bayarController.text),
+            'kembalian': _parseFormattedCurrency(_kembalianController.text),
+            'is_deleted': false,
+          })
+          .select()
+          .single();
+
+      final int transactionId = transactionResponse['id'];
+
+      // Log transaction creation
+      final formatCurrency = NumberFormat.currency(
+        locale: 'id',
+        symbol: 'Rp',
+        decimalDigits: 2,
+      );
+
+      final transactionAmount = double.parse(_totalHargaController.text);
+      await logActivity(
+          'NEW_TRANSACTION',
+          'Created transaction $kodeUnik: ${formatCurrency.format(transactionAmount)} ' +
+              'for customer ID: $pelangganId');
+
+      // Insert transaction details and log each item
+      for (var item in _cartItems) {
+        await _supabase.from('detail_transaction').insert({
+          'transaksi_id': transactionId,
+          'status': _status,
+          'produk_id': item.productId,
+          'harga_produk': item.productPrice * item.quantity,
+          'layanan_id': item.selectedService?.serviceId,
+          'harga_layanan': item.selectedService?.servicePrice ?? 0,
+          'qty': item.quantity,
+          'unit_id': item.unitId,
+        });
+
+        // Log each item in the transaction
+        await logActivity(
+            'TRANSACTION_ITEM',
+            'Added ${item.quantity} ${item.unitName} of ${item.productName} ' +
+                'to transaction $kodeUnik');
+
+        if (item.selectedService != null) {
+          await logActivity(
+              'TRANSACTION_SERVICE',
+              'Added service ${item.selectedService!.serviceName} ' +
+                  'to item ${item.productName} in transaction $kodeUnik');
+        }
+      }
+
+      // Log printing activity
+      if (_isPrinterConnected) {
+        await _printThermalReceipt(transactionResponse, _cartItems);
+        await logActivity('PRINT_RECEIPT',
+            'Printed thermal receipt for transaction $kodeUnik');
+      } else {
+        await _printTransactionInvoice(transactionId);
+        await logActivity(
+            'PRINT_INVOICE', 'Generated PDF invoice for transaction $kodeUnik');
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Transaksi berhasil disimpan!')),
+      );
+
+      _resetForm();
+    } catch (e) {
+      print('Error detail: $e');
+      // Log error
+      await logActivity(
+          'TRANSACTION_ERROR', 'Error processing transaction: $e');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
 
 // Modifikasi fungsi _submitForm untuk menampilkan dialog
-Future<void> _submitForm() async {
-  if (!_formKey.currentState!.validate() || !_validateTransaction()) {
-    return;
+  Future<void> _submitForm() async {
+    if (!_formKey.currentState!.validate() || !_validateTransaction()) {
+      return;
+    }
+
+    await _showConfirmationDialog();
   }
 
-  await _showConfirmationDialog();
-}
-
-  Future<void> _printThermalReceipt(Map<String, dynamic> transaction, List<CartItem> items) async {
+  Future<void> _printThermalReceipt(
+      Map<String, dynamic> transaction, List<CartItem> items) async {
     try {
       if (!_isPrinterConnected || _selectedPrinter == null) {
         throw Exception('Printer not connected');
       }
 
       // Convert cart items to detail format expected by printer
-      final details = items.map((item) => {
-        'produk_id': item.productId,
-        'products': {'produk': item.productName},
-        'qty': item.quantity,
-        'units': {'unit': item.unitName},
-        'harga_produk': item.productPrice * item.quantity,
-        'layanan_id': item.selectedService?.serviceId,
-        'services': item.selectedService != null 
-          ? {'layanan': item.selectedService!.serviceName}
-          : null,
-        'harga_layanan': item.selectedService?.servicePrice ?? 0,
-      }).toList();
+      final details = items
+          .map((item) => {
+                'produk_id': item.productId,
+                'products': {'produk': item.productName},
+                'qty': item.quantity,
+                'units': {'unit': item.unitName},
+                'harga_produk': item.productPrice * item.quantity,
+                'layanan_id': item.selectedService?.serviceId,
+                'services': item.selectedService != null
+                    ? {'layanan': item.selectedService!.serviceName}
+                    : null,
+                'harga_layanan': item.selectedService?.servicePrice ?? 0,
+              })
+          .toList();
 
       await _printerHelper.printReceipt(transaction, details);
     } catch (e) {
       print('Thermal printing error: $e');
       // Fallback to PDF printing
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gagal mencetak ke printer thermal, beralih ke PDF...')),
+        const SnackBar(
+            content:
+                Text('Gagal mencetak ke printer thermal, beralih ke PDF...')),
       );
       await _printTransactionInvoice(transaction['id']);
     }
@@ -735,10 +827,12 @@ Future<void> _submitForm() async {
         return _buildDropdown<BluetoothDevice>(
           label: 'Pilih Printer',
           value: _selectedPrinter,
-          items: snapshot.data!.map((device) => DropdownMenuItem(
-            value: device,
-            child: Text(device.name ?? 'Unknown device'),
-          )).toList(),
+          items: snapshot.data!
+              .map((device) => DropdownMenuItem(
+                    value: device,
+                    child: Text(device.name ?? 'Unknown device'),
+                  ))
+              .toList(),
           onChanged: (device) async {
             if (device != null) {
               setState(() => _selectedPrinter = device);
@@ -750,7 +844,7 @@ Future<void> _submitForm() async {
     );
   }
 
-   Widget _buildCustomerSearch() {
+  Widget _buildCustomerSearch() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -761,7 +855,8 @@ Future<void> _submitForm() async {
         ),
         if (_isSearching)
           const Center(child: CircularProgressIndicator())
-        else if (_customerSearchResults != null && _customerSearchResults!.isNotEmpty)
+        else if (_customerSearchResults != null &&
+            _customerSearchResults!.isNotEmpty)
           Container(
             margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
@@ -772,11 +867,13 @@ Future<void> _submitForm() async {
               children: _customerSearchResults!.map((customer) {
                 return ListTile(
                   title: Text(customer['nama_pelanggan']),
-                  subtitle: Text('${customer['no_hp']} - ${customer['alamat']}'),
+                  subtitle:
+                      Text('${customer['no_hp']} - ${customer['alamat']}'),
                   onTap: () {
                     setState(() {
                       _selectedPelangganId = customer['id'];
-                      _namaPelangganController.text = customer['nama_pelanggan'];
+                      _namaPelangganController.text =
+                          customer['nama_pelanggan'];
                       _noHpController.text = customer['no_hp'];
                       _alamatController.text = customer['alamat'];
                       _customerSearchResults = null;
@@ -904,7 +1001,7 @@ Future<void> _submitForm() async {
     );
   }
 
-   Widget _buildSelectedServices() {
+  Widget _buildSelectedServices() {
     return Column(
       children: _selectedServices.map((service) {
         return Container(
@@ -930,7 +1027,7 @@ Future<void> _submitForm() async {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Rp ${service.servicePrice.toStringAsFixed(2)}',
+                      currencyFormatter.format(service.servicePrice),
                       style: const TextStyle(
                         fontSize: 14,
                         color: Color(0xFF666666),
@@ -943,11 +1040,10 @@ Future<void> _submitForm() async {
                 icon: const Icon(Icons.close, color: Colors.red),
                 onPressed: () {
                   setState(() {
-                    _selectedServices.removeWhere(
-                      (s) => s.serviceId == service.serviceId
-                    );
+                    _selectedServices
+                        .removeWhere((s) => s.serviceId == service.serviceId);
                     if (_selectedServices.isEmpty) {
-                      _selectedLayananId = null;  // Tambahkan ini
+                      _selectedLayananId = null; // Tambahkan ini
                     }
                     _updateTotalPrices();
                   });
@@ -962,59 +1058,60 @@ Future<void> _submitForm() async {
 
   // Modify the service selection part in the build method
   Widget _buildServiceSelection() {
-  return FutureBuilder<List<Map<String, dynamic>>>(
-    future: _fetchServices(),
-    builder: (context, snapshot) {
-      if (!snapshot.hasData) {
-        return const Center(child: CircularProgressIndicator());
-      }
-      return Column(
-        children: [
-          _buildDropdown<int>(
-            label: 'Pilih Layanan',
-            value: null,
-            items: snapshot.data!.map((service) {
-              return DropdownMenuItem<int>(
-                value: service['id'],
-                child: Text(
-                  '${service['layanan']} - Rp${service['harga_layanan']}',
-                ),
-              );
-            }).toList(),
-            onChanged: (value) {
-              if (value != null) {
-                final service = snapshot.data!.firstWhere(
-                  (s) => s['id'] == value,
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _fetchServices(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return Column(
+          children: [
+            _buildDropdown<int>(
+              label: 'Pilih Layanan',
+              value: null,
+              items: snapshot.data!.map((service) {
+                return DropdownMenuItem<int>(
+                  value: service['id'],
+                  child: Text(
+                    '${service['layanan']} - ${currencyFormatter.format(service['harga_layanan'])}',
+                  ),
                 );
-                
-                // Check if service is already selected
-                if (!_selectedServices.any((s) => s.serviceId == value)) {
-                  setState(() {
-                    _selectedLayananId = value;  // Tambahkan ini
-                    _selectedServices.add(SelectedService(
-                      serviceId: value,
-                      serviceName: service['layanan'],
-                      servicePrice: service['harga_layanan'].toDouble(),
-                    ));
-                    _updateTotalPrices();
-                  });
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Layanan ini sudah dipilih'),
-                    ),
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  final service = snapshot.data!.firstWhere(
+                    (s) => s['id'] == value,
                   );
+
+                  // Check if service is already selected
+                  if (!_selectedServices.any((s) => s.serviceId == value)) {
+                    setState(() {
+                      _selectedLayananId = value; // Tambahkan ini
+                      _selectedServices.add(SelectedService(
+                        serviceId: value,
+                        serviceName: service['layanan'],
+                        servicePrice: service['harga_layanan'].toDouble(),
+                      ));
+                      _updateTotalPrices();
+                    });
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Layanan ini sudah dipilih'),
+                      ),
+                    );
+                  }
                 }
-              }
-            },
-            validator: (value) => _selectedServices.isEmpty ? 'Pilih layanan' : null,
-          ),
-          if (_selectedServices.isNotEmpty) _buildSelectedServices(),
-        ],
-      );
-    },
-  );
-}
+              },
+              validator: (value) =>
+                  _selectedServices.isEmpty ? 'Pilih layanan' : null,
+            ),
+            if (_selectedServices.isNotEmpty) _buildSelectedServices(),
+          ],
+        );
+      },
+    );
+  }
 
   Widget _buildDropdown<T>({
     required String label,
@@ -1096,7 +1193,7 @@ Future<void> _submitForm() async {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${item.unitName} - Rp ${item.productPrice.toStringAsFixed(2)} x ${item.quantity}',
+                      '${item.unitName} - ${currencyFormatter.format(item.productPrice)} x ${item.quantity}',
                       style: const TextStyle(
                         fontSize: 14,
                         color: Color(0xFF666666),
@@ -1104,7 +1201,7 @@ Future<void> _submitForm() async {
                     ),
                     if (item.selectedService != null)
                       Text(
-                        'Service: ${item.selectedService!.serviceName} - Rp ${item.selectedService!.servicePrice}',
+                        'Service: ${item.selectedService!.serviceName} - ${currencyFormatter.format(item.selectedService!.servicePrice)}',
                         style: const TextStyle(
                           fontSize: 14,
                           color: Color(0xFF666666),
@@ -1124,7 +1221,8 @@ Future<void> _submitForm() async {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.remove, size: 20),
-                      onPressed: () => _updateQuantity(index, item.quantity - 1),
+                      onPressed: () =>
+                          _updateQuantity(index, item.quantity - 1),
                       color: const Color(0xFF666666),
                     ),
                     Text(
@@ -1136,7 +1234,8 @@ Future<void> _submitForm() async {
                     ),
                     IconButton(
                       icon: const Icon(Icons.add, size: 20),
-                      onPressed: () => _updateQuantity(index, item.quantity + 1),
+                      onPressed: () =>
+                          _updateQuantity(index, item.quantity + 1),
                       color: const Color(0xFF666666),
                     ),
                   ],
@@ -1176,7 +1275,7 @@ Future<void> _submitForm() async {
                     return DropdownMenuItem<int>(
                       value: service['id'],
                       child: Text(
-                        '${service['layanan']} - Rp${service['harga_layanan']}',
+                        '${service['layanan']} - ${currencyFormatter.format(service['harga_layanan'])}',
                       ),
                     );
                   }),
@@ -1239,13 +1338,15 @@ Future<void> _submitForm() async {
                   _buildTextField(
                     controller: _alamatController,
                     label: 'Alamat',
-                    validator: (value) => value?.isEmpty ?? true ? 'Wajib diisi' : null,
+                    validator: (value) =>
+                        value?.isEmpty ?? true ? 'Wajib diisi' : null,
                   ),
                   _buildTextField(
                     controller: _noHpController,
                     label: 'No. HP',
                     keyboardType: TextInputType.phone,
-                    validator: (value) => value?.isEmpty ?? true ? 'Wajib diisi' : null,
+                    validator: (value) =>
+                        value?.isEmpty ?? true ? 'Wajib diisi' : null,
                   ),
                 ],
               ],
@@ -1275,7 +1376,7 @@ Future<void> _submitForm() async {
                             return DropdownMenuItem<int>(
                               value: product['id'],
                               child: Text(
-                                '${product['produk']} (${unit['unit']}) - Rp${product['harga']}',
+                                '${product['produk']} (${unit['unit']}) - ${currencyFormatter.format(product['harga'])}',
                               ),
                             );
                           }).toList(),
@@ -1315,7 +1416,25 @@ Future<void> _submitForm() async {
                   keyboardType: TextInputType.number,
                   validator: (value) =>
                       value?.isEmpty ?? true ? 'Wajib diisi' : null,
-                  onChanged: (_) => _calculateKembalian(),
+                  onChanged: (value) {
+                    if (value.isNotEmpty) {
+                      // Handle numeric input and format
+                      final numericValue =
+                          value.replaceAll(RegExp(r'[^0-9]'), '');
+                      if (numericValue.isNotEmpty) {
+                        final amount = double.parse(numericValue);
+                        _bayarController.text =
+                            currencyFormatter.format(amount);
+
+                        // Set cursor to end
+                        _bayarController.selection = TextSelection.fromPosition(
+                          TextPosition(offset: _bayarController.text.length),
+                        );
+
+                        _calculateKembalian();
+                      }
+                    }
+                  },
                 ),
                 _buildTextField(
                   controller: _kembalianController,
@@ -1338,7 +1457,8 @@ Future<void> _submitForm() async {
                   },
                 ),
               ],
-            ),_buildCard(
+            ),
+            _buildCard(
               title: 'Printer Settings',
               children: [
                 _buildPrinterSelection(),

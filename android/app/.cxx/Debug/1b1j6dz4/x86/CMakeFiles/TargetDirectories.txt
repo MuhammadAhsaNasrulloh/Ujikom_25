@@ -1,0 +1,2 @@
+/home/sannasrull/development/weilaundry/android/app/.cxx/Debug/1b1j6dz4/x86/CMakeFiles/edit_cache.dir
+/home/sannasrull/development/weilaundry/android/app/.cxx/Debug/1b1j6dz4/x86/CMakeFiles/rebuild_cache.dir

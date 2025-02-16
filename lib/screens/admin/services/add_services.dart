@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:waixilaundry/models/services.dart';
+import 'package:waixilaundry/screens/admin/log/log_screen.dart';
 
 class AddServices extends StatefulWidget {
   const AddServices({super.key});
@@ -15,7 +16,6 @@ class _AddServicesState extends State<AddServices> {
 
   // Controller untuk form input
   final _layananController = TextEditingController();
-  final _estimasiController = TextEditingController();
   final _durasiController = TextEditingController();
   final _priceController = TextEditingController();
   final _unitController = TextEditingController();
@@ -25,7 +25,6 @@ class _AddServicesState extends State<AddServices> {
   @override
   void dispose() {
     _layananController.dispose();
-    _estimasiController.dispose();
     _durasiController.dispose();
     _priceController.dispose();
     _unitController.dispose();
@@ -45,16 +44,12 @@ class _AddServicesState extends State<AddServices> {
         durasi: _durasiController.text.isNotEmpty
             ? int.parse(_durasiController.text)
             : null,
-        estimasi: _estimasiController.text.isNotEmpty
-            ? _estimasiController.text
-            : null,
         harga: _priceController.text.isNotEmpty
             ? int.parse(_priceController.text)
             : 0,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
-
 
       await supabase.from('services').insert(service.toMap());
 
@@ -85,7 +80,7 @@ class _AddServicesState extends State<AddServices> {
           'Tambah Layanan & Unit',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
-        backgroundColor: const Color(0xFF005BAC),
+        backgroundColor: AppColors.primaryColor,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -94,63 +89,77 @@ class _AddServicesState extends State<AddServices> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Tambah Layanan',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _layananController,
-                decoration: const InputDecoration(
-                    labelText: 'Nama Layanan', border: OutlineInputBorder()),
-                validator: (value) =>
-                    value!.isEmpty ? 'Nama layanan tidak boleh kosong' : null,
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _durasiController,
-                decoration: const InputDecoration(
-                    labelText: 'Durasi waktu', border: OutlineInputBorder()),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _estimasiController,
-                decoration: const InputDecoration(
-                    labelText: 'Estimasi (hari/minggu)',
-                    border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _priceController,
-                decoration: const InputDecoration(
-                    labelText: 'Harga',
-                    border: OutlineInputBorder()),
-                keyboardType: TextInputType.number,
-              ),
+              _buildSectionTitle('Tambah Layanan'),
+              _buildTextField(_layananController, 'Nama Layanan',
+                  isRequired: true),
+              _buildTextField(_durasiController, 'Durasi waktu',
+                  keyboardType: TextInputType.number),
+              _buildTextField(_priceController, 'Harga',
+                  keyboardType: TextInputType.number),
               const SizedBox(height: 20),
-              const Text('Tambah Unit',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _unitController,
-                decoration: const InputDecoration(
-                    labelText: 'Nama Unit', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _addData,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF005BAC),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Tambah Data',
-                        style: TextStyle(fontSize: 16, color: Colors.white)),
-              ),
+              _buildSectionTitle('Tambah Unit'),
+              _buildTextField(_unitController, 'Nama Unit'),
+              const SizedBox(height: 30),
+              _buildSubmitButton(),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Text(
+        title,
+        style: const TextStyle(
+            fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
+      ),
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String labelText,
+      {bool isRequired = false,
+      TextInputType keyboardType = TextInputType.text}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: TextFormField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: labelText,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+          filled: true,
+          fillColor: Colors.grey[200],
+        ),
+        keyboardType: keyboardType,
+        validator: isRequired
+            ? (value) => value!.isEmpty ? '$labelText tidak boleh kosong' : null
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _addData,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primaryColor,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+        ),
+        child: _isLoading
+            ? const CircularProgressIndicator(color: Colors.white)
+            : const Text(
+                'Tambah Data',
+                style: TextStyle(fontSize: 16, color: Colors.white),
+              ),
       ),
     );
   }

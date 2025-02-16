@@ -89,6 +89,26 @@ class _UserScreenState extends State<UserProfiles> {
     }
   }
 
+   Future<List<Map<String, dynamic>>> _fetchUserActivityLogs() async {
+    try {
+      final response = await _supabase
+          .from('activity_logs')
+          .select('*')
+          .eq('user_id', widget.userId)
+          .order('timestamp', ascending: false)
+          .limit(10);
+
+      if (response.isEmpty) {
+        return [];
+      }
+
+      return response;
+    } catch (e) {
+      print('Error fetching activity logs: $e');
+      return [];
+    }
+  }
+
   void _logDebug(String message) {
     debugPrint('🔧 DEBUG: $message');
   }
@@ -255,8 +275,6 @@ class _UserScreenState extends State<UserProfiles> {
           ),
           const SizedBox(height: 16),
           _buildDetailItem('Email', userProfile?['email'] ?? 'No email'),
-          _buildDetailItem('Phone', userProfile?['phone'] ?? 'No phone'),
-          _buildDetailItem('Address', userProfile?['address'] ?? 'No address'),
           _buildDetailItem(
             'Member Since',
             _formatDate(userProfile?['created_at']),
@@ -293,21 +311,49 @@ class _UserScreenState extends State<UserProfiles> {
             ),
           ),
           const SizedBox(height: 16),
-          // Add your activity list here
-          const Center(
-            child: Text(
-              'No recent activity',
-              style: TextStyle(
-                color: AppColors.textLightColor,
-                fontSize: 16,
-              ),
-            ),
+          FutureBuilder<List<Map<String, dynamic>>>(
+            future: _fetchUserActivityLogs(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              } else if (snapshot.hasError) {
+                return Center(
+                  child: Text(
+                    'Error: ${snapshot.error}',
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontSize: 16,
+                    ),
+                  ),
+                );
+              } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'No recent activity',
+                    style: TextStyle(
+                      color: AppColors.textLightColor,
+                      fontSize: 16,
+                    ),
+                  ),
+                );
+              } else {
+                final activities = snapshot.data!;
+                return Column(
+                  children: activities.map((activity) {
+                    return ListTile(
+                      title: Text(activity['description'] ?? 'No description'),
+                      subtitle: Text(_formatDate(activity['timestamp'])),
+                    );
+                  }).toList(),
+                );
+              }
+            },
           ),
         ],
       ),
     );
   }
-
+  
   Widget _buildDetailItem(String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),

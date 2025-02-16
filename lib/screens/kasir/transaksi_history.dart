@@ -27,36 +27,42 @@ class _TransaksiHistoryState extends State<TransaksiHistory> {
   }
 
   Future<void> fetchDataTransaksi() async {
-    try {
-      setState(() => isLoading = true);
-      final response = await supabase.from('transactions').select('''
-      id, 
-      kode_unik, 
-      kasir_id, 
-      pelanggan_id, 
-      bayar, 
-      kembalian, 
-      is_deleted, 
-      created_at, 
-      updated_at, 
-      total_harga, 
-      status:detail_transaction!inner(status), 
-      profiles(name), 
-      pelanggans(nama_pelanggan, no_hp)
-    ''').order('created_at', ascending: false);
-      if (response != null && response is List) {
-        setState(() {
-          dataTransaksi = List<Map<String, dynamic>>.from(response);
-          isLoading = false;
-        });
-      } else {
-        throw 'No data received from transactions';
-      }
-      print('Transaction Response: $response');
-    } catch (e) {
-      setState(() => isLoading = false);
+  try {
+    setState(() => isLoading = true);
+    final response = await supabase
+        .from('transactions')
+        .select('''
+          id, 
+          kode_unik, 
+          kasir_id, 
+          pelanggan_id, 
+          bayar, 
+          kembalian, 
+          is_deleted, 
+          created_at, 
+          updated_at, 
+          total_harga, 
+          status:detail_transaction!inner(status), 
+          profiles(name), 
+          pelanggans(nama_pelanggan, no_hp)
+        ''')
+        .eq('is_deleted', false) // Filter untuk hanya mengambil transaksi yang tidak dihapus
+        .order('created_at', ascending: false);
+
+    if (response != null && response is List) {
+      setState(() {
+        dataTransaksi = List<Map<String, dynamic>>.from(response);
+        isLoading = false;
+      });
+    } else {
+      throw 'No data received from transactions';
     }
+    print('Transaction Response: $response');
+  } catch (e) {
+    setState(() => isLoading = false);
+    print('Error fetching transactions: $e');
   }
+}
 
 
   Color getStatusColor(String status) {

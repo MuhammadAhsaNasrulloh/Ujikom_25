@@ -5,11 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:printing/printing.dart';
 import 'package:waixilaundry/helper/printer_helper.dart';
-import 'package:waixilaundry/helper/thermal_helper.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whatsapp_unilink/whatsapp_unilink.dart';
 
@@ -21,6 +17,52 @@ class DetailTransaksi extends StatefulWidget {
   @override
   State<DetailTransaksi> createState() => _DetailTransaksiState();
 }
+
+class CurrencyFormatUtils {
+  static final NumberFormat _currencyFormatter = NumberFormat.currency(
+    locale: 'id_ID',
+    symbol: 'Rp',
+    decimalDigits: 0,
+  );
+
+  // Format number to currency string (returns "Rp10.000")
+  static String format(dynamic number) {
+    if (number == null) return 'Rp0';
+
+    // Handle string input
+    if (number is String) {
+      number = double.tryParse(number) ?? 0;
+    }
+
+    // Handle int input
+    if (number is int) {
+      number = number.toDouble();
+    }
+
+    return _currencyFormatter.format(number);
+  }
+
+  // Format without symbol (returns "10.000")
+  static String formatWithoutSymbol(dynamic number) {
+    if (number == null) return '0';
+
+    return format(number).replaceAll('Rp', '');
+  }
+
+  // Parse currency string to number (handles "Rp10.000" or "10.000")
+  static double parse(String currencyString) {
+    if (currencyString.isEmpty) return 0;
+
+    // Remove currency symbol and any whitespace
+    String cleanString = currencyString
+        .replaceAll('Rp', '')
+        .replaceAll(' ', '')
+        .replaceAll('.', '');
+
+    return double.tryParse(cleanString) ?? 0;
+  }
+}
+
 
 class _DetailTransaksiState extends State<DetailTransaksi> {
   static const Color primaryColor = Color(0xFF2563EB);
@@ -44,150 +86,6 @@ class _DetailTransaksiState extends State<DetailTransaksi> {
     } else {
       _currentStatus = widget.transaksi['status']?.toString() ?? 'diterima';
     }
-  }
-
-  Future<pw.Document> _generatePdf() async {
-    final pdf = pw.Document();
-    final detailTransaksi = await _fetchDetailTransaksi();
-
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) {
-          return pw.Center(
-            child: pw.Container(
-              width: 400, // Adjust width as needed
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.center,
-                children: [
-                  // Header section
-                  pw.Text(
-                    "Waixi Laundry",
-                    style: pw.TextStyle(
-                        fontSize: 20, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.SizedBox(height: 20),
-
-                  // Content container with left-aligned text
-                  pw.Container(
-                    width: double.infinity,
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        // Transaction details
-                        pw.Text(
-                            "Transaction ID: ${widget.transaksi['kode_unik']}",
-                            style: pw.TextStyle(fontSize: 12)),
-                        pw.Text(
-                            "Cashier: ${widget.transaksi['profiles']['name'] ?? 'Unknown'}",
-                            style: pw.TextStyle(fontSize: 12)),
-                        pw.Text(
-                            "Customer: ${widget.transaksi['pelanggans']['nama_pelanggan'] ?? 'Unknown'}",
-                            style: pw.TextStyle(fontSize: 12)),
-
-                        pw.Divider(thickness: 1),
-                        pw.Text("Items:",
-                            style: pw.TextStyle(
-                                fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                        pw.SizedBox(height: 10),
-
-                        // Services section
-                        ...detailTransaksi
-                            .where((detail) => detail['layanan_id'] != null)
-                            .map((detail) {
-                          return pw.Row(
-                            mainAxisAlignment:
-                                pw.MainAxisAlignment.spaceBetween,
-                            children: [
-                              pw.Expanded(
-                                child: pw.Text(
-                                  "Service: ${detail['services']['layanan']}",
-                                  style: pw.TextStyle(fontSize: 12),
-                                ),
-                              ),
-                              pw.Text(
-                                "Rp${detail['harga_layanan']}",
-                                style: pw.TextStyle(fontSize: 12),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-
-                        pw.SizedBox(height: 10),
-
-                        // Products section
-                        ...detailTransaksi
-                            .where((detail) => detail['produk_id'] != null)
-                            .map((detail) {
-                          return pw.Row(
-                            mainAxisAlignment:
-                                pw.MainAxisAlignment.spaceBetween,
-                            children: [
-                              pw.Expanded(
-                                child: pw.Text(
-                                  "Product: ${detail['products']['produk']} x ${detail['qty']} ${detail['units']['unit']}",
-                                  style: pw.TextStyle(fontSize: 12),
-                                ),
-                              ),
-                              pw.Text(
-                                '${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(detail['harga'])}',
-                                style: pw.TextStyle(fontSize: 12),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-
-                        pw.Divider(thickness: 1),
-
-                        // Payment details
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text("Total:",
-                                style: pw.TextStyle(fontSize: 12)),
-                            pw.Text("Rp${widget.transaksi['total_harga']}",
-                                style: pw.TextStyle(fontSize: 12)),
-                          ],
-                        ),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text("Paid:", style: pw.TextStyle(fontSize: 12)),
-                            pw.Text("Rp${widget.transaksi['bayar']}",
-                                style: pw.TextStyle(fontSize: 12)),
-                          ],
-                        ),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text("Change:",
-                                style: pw.TextStyle(fontSize: 12)),
-                            pw.Text("Rp${widget.transaksi['kembalian']}",
-                                style: pw.TextStyle(fontSize: 12)),
-                          ],
-                        ),
-
-                        pw.Divider(thickness: 1),
-
-                        // DateTime - centered
-                        pw.Center(
-                          child: pw.Text(
-                            "${widget.transaksi['created_at']?.toString().split('.')[0] ?? 'Unknown Date'}",
-                            style: pw.TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-
-    return pdf;
   }
 
   Future<List<dynamic>> _fetchDetailTransaksi() async {
@@ -274,64 +172,112 @@ class _DetailTransaksiState extends State<DetailTransaksi> {
 
   // Add this new widget for status selection
   Widget _buildStatusSelector() {
-  return Card(
-    elevation: 0,
-    color: Colors.white,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(12),
-      side: BorderSide(color: Colors.grey.shade200),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "Update Status",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            value: _currentStatus,
-            decoration: InputDecoration(
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            items: const [
-              DropdownMenuItem(value: 'diterima', child: Text('Diterima')),
-              DropdownMenuItem(value: 'diproses', child: Text('Diproses')),
-              DropdownMenuItem(value: 'selesai', child: Text('Selesai')),
-            ],
-            onChanged: (String? newValue) {
-              if (newValue != null && newValue != _currentStatus) {
-                _updateStatus(newValue);
-              }
-            },
-          ),
-        ],
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
       ),
-    ),
-  );
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Update Status",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _currentStatus,
+              decoration: InputDecoration(
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'diterima', child: Text('Diterima')),
+                DropdownMenuItem(value: 'diproses', child: Text('Diproses')),
+                DropdownMenuItem(value: 'selesai', child: Text('Selesai')),
+              ],
+              onChanged: (String? newValue) {
+                if (newValue != null && newValue != _currentStatus) {
+                  _updateStatus(newValue);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _softDeleteTransaction() async {
+  try {
+    // Show loading indicator
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return const Center(child: CircularProgressIndicator());
+        },
+      );
+    }
+
+    // Perform soft delete
+    await _supabase
+        .from('transactions')
+        .update({'is_deleted': true})
+        .eq('id', widget.transaksi['id']);
+
+    // Hide loading indicator
+    if (mounted) {
+      Navigator.pop(context);
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Transaksi berhasil dihapus (soft delete).'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      // Navigate back to previous screen
+      Navigator.pop(context);
+    }
+  } catch (e) {
+    print('Error soft deleting transaction: $e'); // Untuk debugging
+    // Hide loading indicator
+    if (mounted) {
+      Navigator.pop(context);
+
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal menghapus transaksi: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 }
+
   Future<void> _shareToWhatsApp() async {
     try {
-      final pdf = await _generatePdf();
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/transaction_invoice.pdf');
-      await file.writeAsBytes(await pdf.save());
-
       final noHp = widget.transaksi['pelanggans']['no_hp'];
       final namaPelanggan =
           widget.transaksi['pelanggans']['nama_pelanggan'] ?? 'Pelanggan';
       final kodeUnik = widget.transaksi['kode_unik'] ?? 'Kode Tidak Tersedia';
       final totalHarga = widget.transaksi['total_harga'] ?? 0;
 
+      // Validate phone number
       if (noHp == null || noHp.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -342,66 +288,93 @@ class _DetailTransaksiState extends State<DetailTransaksi> {
         return;
       }
 
-      // Format nomor telepon (hapus +)
-      String phoneNumber = noHp.replaceAll('+', '');
+      // Format phone number - ensure it starts with country code
+      String phoneNumber =
+          noHp.replaceAll('+', '').replaceAll('-', '').replaceAll(' ', '');
+      if (!phoneNumber.startsWith('62')) {
+        phoneNumber =
+            '62${phoneNumber.startsWith('0') ? phoneNumber.substring(1) : phoneNumber}';
+      }
 
-      // Fetch detail transaksi untuk mendapatkan produk dan durasi
       final detailTransaksi = await _fetchDetailTransaksi();
 
-      // Membuat daftar pesanan dengan produk dan layanan
-      String pesananText = '\n\nDetail Pesanan:';
+      // Build message with StringBuilder pattern for better performance
+      StringBuffer pesananText = StringBuffer('\n\nDetail Pesanan:');
 
-      // Menambahkan layanan
+      // Add services
       final services =
           detailTransaksi.where((detail) => detail['layanan_id'] != null);
       if (services.isNotEmpty) {
-        pesananText += '\n\nLayanan:';
+        pesananText.write('\n\nLayanan:');
         for (var service in services) {
           final namaLayanan =
               service['services']['layanan'] ?? 'Layanan tidak tersedia';
           final hargaLayanan = service['harga_layanan'] ?? 0;
-          final durasiLayanan = service['services']['durasi'].toString() ?? '0';
-          pesananText += '\n- $namaLayanan (Rp$hargaLayanan)';
-          pesananText += '\n Durasi Layanan  $durasiLayanan Hari';
+          final durasiLayanan =
+              service['services']['durasi']?.toString() ?? '0';
+
+          pesananText.write('\n- $namaLayanan');
+          pesananText.write(
+              ' (${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(hargaLayanan)})');
+          pesananText.write('\n  Durasi Layanan: $durasiLayanan Hari');
         }
       }
 
-      // Menambahkan produk
+      // Add products
       final products =
           detailTransaksi.where((detail) => detail['produk_id'] != null);
       if (products.isNotEmpty) {
-        pesananText += '\n\nProduk:';
+        pesananText.write('\n\nProduk:');
         for (var product in products) {
           final namaProduk =
               product['products']['produk'] ?? 'Produk tidak tersedia';
           final qty = product['qty'] ?? 0;
           final unit = product['units']['unit'] ?? 'pcs';
-          final hargaProduk = product['harga_produk'] ?? 0;
-          pesananText += '\n- $namaProduk ($qty $unit) - Rp$hargaProduk';
+          final harga = product['products']['harga'] ?? 0;
+
+          pesananText.write('\n- $namaProduk ($qty $unit)');
+          pesananText.write(
+              ' - ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(harga)}');
         }
       }
 
-      // Menambahkan total harga
-      pesananText += '\n\nTotal: Rp$totalHarga';
+      // Format total
+      final formattedTotal = NumberFormat.currency(
+        locale: 'id_ID',
+        symbol: 'Rp ',
+        decimalDigits: 0,
+      ).format(totalHarga);
+      pesananText.write('\n\nTotal: $formattedTotal');
 
-      // Buat link WhatsApp menggunakan package
+      // Create WhatsApp link with proper encoding
       final link = WhatsAppUnilink(
         phoneNumber: phoneNumber,
         text:
-            "Halo $namaPelanggan,\n\nBerikut adalah detail transaksi Anda dengan kode: $kodeUnik.$pesananText\n\nTerima kasih telah menggunakan jasa kami!",
+            "Halo $namaPelanggan,\n\nBerikut adalah detail transaksi Anda dengan kode: $kodeUnik${pesananText.toString()}\n\nTerima kasih telah menggunakan jasa kami!",
       );
 
-      // Launch WhatsApp
-      await launchUrl(
-        Uri.parse('${link.toString()}'),
+      // Launch WhatsApp with error handling
+      final success = await launchUrl(
+        Uri.parse(link.toString()),
         mode: LaunchMode.externalApplication,
       );
+
+      if (!success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                "Gagal membuka WhatsApp. Pastikan WhatsApp terinstall di perangkat Anda."),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } catch (e) {
-      print('Error sharing to WhatsApp: $e');
+      print('Error sharing to WhatsApp: $e'); // For debugging
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Gagal membuka WhatsApp: $e"),
+            content: Text("Gagal membuka WhatsApp: ${e.toString()}"),
+            backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -545,11 +518,12 @@ class _DetailTransaksiState extends State<DetailTransaksi> {
   }
 
   Widget _buildTransactionHeader(List<dynamic> dataTransaction) {
-    final totalAmount = widget.transaksi['total_harga'] ?? 0;
+    final totalAmount = CurrencyFormatUtils.format(widget.transaksi['total_harga'] ?? 0);
     String status;
     if (dataTransaction.isNotEmpty) {
       if (dataTransaction[0]['status'] is Map) {
-        status = dataTransaction[0]['status']['status']?.toString() ?? 'Unknown';
+        status =
+            dataTransaction[0]['status']['status']?.toString() ?? 'Unknown';
       } else {
         status = dataTransaction[0]['status']?.toString() ?? 'Unknown';
       }
@@ -581,7 +555,7 @@ class _DetailTransaksiState extends State<DetailTransaksi> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Rp ${totalAmount.toString()}',
+                    '${totalAmount.toString()}',
                     style: const TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
@@ -641,12 +615,106 @@ class _DetailTransaksiState extends State<DetailTransaksi> {
               "Change",
               "${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(widget.transaksi['kembalian'])}",
             ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _softDeleteTransaction,
+                    icon: const Icon(Icons.delete, color: Colors.white),
+                    label: const Text('Hapus Transaksi'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _sendStatusToWhatsApp,
+                    icon: const Icon(Icons.send, color: Colors.white),
+                    label: const Text('Kirim Status ke WA'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
+  Future<void> _sendStatusToWhatsApp() async {
+  try {
+    final noHp = widget.transaksi['pelanggans']['no_hp'];
+    final namaPelanggan = widget.transaksi['pelanggans']['nama_pelanggan'] ?? 'Pelanggan';
+    final kodeUnik = widget.transaksi['kode_unik'] ?? 'Kode Tidak Tersedia';
+    final status = _currentStatus;
+
+    // Validate phone number
+    if (noHp == null || noHp.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text("Nomor WhatsApp pelanggan tidak tersedia.")),
+        );
+      }
+      return;
+    }
+
+    // Format phone number - ensure it starts with country code
+    String phoneNumber = noHp.replaceAll('+', '').replaceAll('-', '').replaceAll(' ', '');
+    if (!phoneNumber.startsWith('62')) {
+      phoneNumber = '62${phoneNumber.startsWith('0') ? phoneNumber.substring(1) : phoneNumber}';
+    }
+
+    // Create WhatsApp link with proper encoding
+    final link = WhatsAppUnilink(
+      phoneNumber: phoneNumber,
+      text: "Halo $namaPelanggan,\n\nStatus transaksi Anda dengan kode: $kodeUnik telah diupdate menjadi: $status.\n\nTerima kasih telah menggunakan jasa kami!",
+    );
+
+    // Launch WhatsApp with error handling
+    final success = await launchUrl(
+      Uri.parse(link.toString()),
+      mode: LaunchMode.externalApplication,
+    );
+
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              "Gagal membuka WhatsApp. Pastikan WhatsApp terinstall di perangkat Anda."),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  } catch (e) {
+    print('Error sending status to WhatsApp: $e'); // For debugging
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Gagal mengirim status ke WhatsApp: ${e.toString()}"),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+}
   Widget _buildTransactionDetail(String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
@@ -781,7 +849,7 @@ class _DetailTransaksiState extends State<DetailTransaksi> {
                     itemCount: productDetails.length,
                     itemBuilder: (context, index) {
                       final detail = productDetails[index];
-                      final price = detail['harga_produk'] ?? 0;
+                      final price = detail['products']['harga'] ?? 0;
                       String formattedPrice;
                       try {
                         formattedPrice = NumberFormat.currency(
